@@ -41,37 +41,76 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
   const markersRef = useRef({});
   const [activeStyle, setActiveStyle] = useState('voyager');
 
-  // Initialize Leaflet map
+  // Initialize Leaflet map lifecycle
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    if (!mapInstanceRef.current) {
-      const defaultCenter = [37.774929, -122.419416];
-      const map = L.map(mapContainerRef.current, {
-        center: defaultCenter,
-        zoom: 15,
-        zoomControl: true,
+    // Clean up any stale map instance
+    if (mapInstanceRef.current) {
+      try {
+        mapInstanceRef.current.remove();
+      } catch (e) {
+        // ignore
+      }
+      mapInstanceRef.current = null;
+    }
+
+    const defaultCenter = [22.7196, 75.8577]; // Indore Municipal Corridor
+    const map = L.map(mapContainerRef.current, {
+      center: defaultCenter,
+      zoom: 14,
+      zoomControl: true,
+      fadeAnimation: true
+    });
+
+    const selectedStyle = CARTO_STYLES[activeStyle] || CARTO_STYLES.voyager;
+    const initialLayer = L.tileLayer(selectedStyle.url, {
+      attribution: selectedStyle.attribution,
+      subdomains: selectedStyle.id === 'osm' ? 'abc' : 'abcd',
+      maxZoom: 20
+    }).addTo(map);
+
+    tileLayerRef.current = initialLayer;
+    mapInstanceRef.current = map;
+
+    // Guarantee size recalculation after CSS layout pass
+    const timer1 = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 150);
+
+    const timer2 = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 600);
+
+    // Watch for container resizes
+    let resizeObserver = null;
+    if (window.ResizeObserver && mapContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
       });
-
-      // CARTO Basemap tile layer authenticated with API key (?key=)
-      const initialStyle = CARTO_STYLES[activeStyle] || CARTO_STYLES.voyager;
-      const initialLayer = L.tileLayer(initialStyle.url, {
-        attribution: initialStyle.attribution,
-        subdomains: initialStyle.id === 'osm' ? 'abc' : 'abcd',
-        maxZoom: 20
-      }).addTo(map);
-
-      tileLayerRef.current = initialLayer;
-      mapInstanceRef.current = map;
-
-      // Invalidate size to ensure clean tile rendering
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 200);
+      resizeObserver.observe(mapContainerRef.current);
     }
 
     return () => {
-      // Map cleanup if container unmounts
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          // ignore
+        }
+        mapInstanceRef.current = null;
+      }
     };
   }, []);
 
@@ -81,7 +120,11 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
     const map = mapInstanceRef.current;
 
     if (tileLayerRef.current) {
-      map.removeLayer(tileLayerRef.current);
+      try {
+        map.removeLayer(tileLayerRef.current);
+      } catch (e) {
+        // ignore
+      }
     }
 
     const selectedStyle = CARTO_STYLES[activeStyle] || CARTO_STYLES.voyager;
@@ -100,19 +143,30 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
     const map = mapInstanceRef.current;
 
     // Clear existing markers
-    Object.values(markersRef.current).forEach(marker => marker.remove());
+    Object.values(markersRef.current).forEach(marker => {
+      try {
+        marker.remove();
+      } catch (e) {
+        // ignore
+      }
+    });
     markersRef.current = {};
 
-    if (issues.length === 0) return;
+    if (!issues || issues.length === 0) {
+      map.setView([22.7196, 75.8577], 13);
+      return;
+    }
 
     const bounds = L.latLngBounds();
+    let validPins = 0;
 
     issues.forEach(issue => {
       const lat = issue.latitude;
       const lon = issue.longitude;
-      if (!lat || !lon) return;
+      if (!lat || !lon || isNaN(lat) || isNaN(lon)) return;
 
       bounds.extend([lat, lon]);
+      validPins++;
 
       // Determine marker color
       let markerColor = '#d97706'; // municipal amber
@@ -166,7 +220,7 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
             ${issue.code} · ${issue.title}
           </div>
           <div style="color: #64748b; font-size: 11px; margin-bottom: 6px;">
-            ${issue.locationName}
+            ${issue.locationName || 'Municipal Corridor'}
           </div>
           <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;">
             <span style="background: #f1f5f9; color: #0f172a; padding: 2px 6px; border-radius: 2px; font-size: 10px; font-weight: 600;">
@@ -189,14 +243,28 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
       markersRef.current[issue.id] = marker;
     });
 
-    if (bounds.isValid()) {
+    if (validPins > 0 && bounds.isValid()) {
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
     }
   }, [issues, selectedIssue, onSelectIssue]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '380px' }}>
-      <div id="interactive-map" ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '380px', overflow: 'hidden' }}>
+      {/* Map Target DOM Node */}
+      <div
+        ref={mapContainerRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: '#e2e8f0',
+          zIndex: 1
+        }}
+      />
 
       {/* Floating CARTO Controls Bar */}
       <div style={{
