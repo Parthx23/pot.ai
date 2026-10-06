@@ -226,10 +226,23 @@ export default function App() {
         escalationsCount: 0,
         totalOccurrences: 0
       });
-      setIsResetting(false);
-      refreshData();
+      // Give DB and network time to settle
+      await new Promise(r => setTimeout(r, 400));
+      const [statsRes, issuesRes] = await Promise.all([
+        fetch('/api/stats'),
+        fetch('/api/issues')
+      ]);
+      if (statsRes.ok) {
+        const s = await statsRes.json();
+        setStats(s);
+      }
+      if (issuesRes.ok) {
+        const iss = await issuesRes.json();
+        setIssues(iss);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Reset error:', err);
+    } finally {
       setIsResetting(false);
     }
   };

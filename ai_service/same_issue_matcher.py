@@ -97,13 +97,41 @@ class IssueMatchingEngine:
         if existing_issue:
             # Repeat detection of the same physical defect!
             is_new = False
-            existing_issue.occurrences += 1
+
+            # Determine if this detection is an independent pass or the same continuous observation
+            last_record = (
+                db.query(DetectionRecordModel)
+                .filter(DetectionRecordModel.issue_id == existing_issue.id)
+                .order_by(DetectionRecordModel.timestamp.desc())
+                .first()
+            )
+
+            is_distinct_pass = False
+            if last_record is None:
+                is_distinct_pass = False
+            elif str(inspection_run_id).startswith("live_camera"):
+                # For continuous live camera (static mode or same patrol view),
+                # do NOT increment occurrences while pointing at the same pothole.
+                # Only count as a new pass if the defect has NOT been seen for > 45 seconds (vehicle circled back).
+                time_since_last = detection.timestamp - existing_issue.last_seen_at
+                if time_since_last > 45.0:
+                    is_distinct_pass = True
+            else:
+                # For batch videos / scheduled passes: only increment if the run ID is different
+                # (e.g. pass_1 vs pass_2 vs pass_3)
+                if last_record.inspection_run_id != inspection_run_id:
+                    is_distinct_pass = True
+
+            if is_distinct_pass:
+                existing_issue.occurrences += 1
+
             existing_issue.last_seen_at = detection.timestamp
             
             # Update evidence if this new detection has higher confidence
             if detection.confidence > existing_issue.confidence:
                 existing_issue.confidence = detection.confidence
-                existing_issue.evidence_image_path = evidence_image_path
+                if evidence_image_path:
+                    existing_issue.evidence_image_path = evidence_image_path
                 existing_issue.bbox_json = bbox_json
 
             # Recalculate priority score with occurrence boost
@@ -121,8 +149,8 @@ class IssueMatchingEngine:
             existing_issue.updated_at = time.time()
 
             escalation_triggered = None
-            # Check for Escalation threshold (Occurrence >= 3)
-            if existing_issue.occurrences >= 3:
+            # Check for Escalation threshold (only on distinct passes reaching >= 3)
+            if existing_issue.occurrences >= 3 and is_distinct_pass:
                 existing_issue.status = IssueStatus.ESCALATED.value
                 existing_issue.priority = PriorityLevel.CRITICAL.value
 
@@ -146,22 +174,24 @@ class IssueMatchingEngine:
                 db.add(escalation)
                 escalation_triggered = escalation
             
-            # Save detection record in history
-            det_record = DetectionRecordModel(
-                id=detection.id,
-                issue_id=existing_issue.id,
-                inspection_run_id=inspection_run_id,
-                timestamp=detection.timestamp,
-                confidence=detection.confidence,
-                severity=detection.severity.value,
-                latitude=detection.latitude,
-                longitude=detection.longitude,
-                bbox_json=bbox_json,
-                evidence_image_path=evidence_image_path,
-                vehicle_id=detection.vehicleId,
-                is_recheck=False
-            )
-            db.add(det_record)
+            # Save detection record in history only on distinct passes or if no previous record exists
+            if is_distinct_pass or last_record is None:
+                det_record = DetectionRecordModel(
+                    id=detection.id,
+                    issue_id=existing_issue.id,
+                    inspection_run_id=inspection_run_id,
+                    timestamp=detection.timestamp,
+                    confidence=detection.confidence,
+                    severity=detection.severity.value,
+                    latitude=detection.latitude,
+                    longitude=detection.longitude,
+                    bbox_json=bbox_json,
+                    evidence_image_path=evidence_image_path,
+                    vehicle_id=detection.vehicleId,
+                    is_recheck=False
+                )
+                db.add(det_record)
+
             db.commit()
             db.refresh(existing_issue)
             return existing_issue, is_new, escalation_triggered

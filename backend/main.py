@@ -60,6 +60,7 @@ resolution_engine = ResolutionRecheckEngine(proximity_threshold_meters=25.0)
 
 # Active WebSocket connections
 active_connections: List[WebSocket] = []
+last_reset_time: float = 0.0
 
 # Initialize tables immediately
 init_db()
@@ -143,8 +144,20 @@ async def websocket_camera_stream(websocket: WebSocket):
             matched_issue_dict = None
             escalation_dict = None
 
-            if len(detections) > 0 and auto_capture:
+            if len(detections) > 0 and auto_capture and (now - last_reset_time >= 2.0):
                 for det in detections:
+                    existing = matching_engine.find_matching_issue(
+                        db, det.latitude, det.longitude, det.type.value
+                    )
+                    # If already recorded and seen recently (<45s), camera is in static mode or same pass:
+                    # Do NOT create duplicate issues, do NOT increment occurrences, do NOT re-write files
+                    if existing and (now - existing.last_seen_at) < 45.0:
+                        existing.last_seen_at = now
+                        if det.confidence > existing.confidence:
+                            existing.confidence = det.confidence
+                        db.commit()
+                        continue
+
                     ev_name = f"evidence_live_{det.id}.jpg"
                     ev_path = os.path.join(EVIDENCE_DIR, ev_name)
                     ann_frame = detector.annotate_frame(
@@ -251,8 +264,18 @@ def process_camera_frame(req: CameraFrameRequest, db: Session = Depends(get_db))
     matched_issues = []
     escalations = []
 
-    if len(detections) > 0 and req.autoCapture:
+    if len(detections) > 0 and req.autoCapture and (now - last_reset_time >= 2.0):
         for det in detections:
+            existing = matching_engine.find_matching_issue(
+                db, det.latitude, det.longitude, det.type.value
+            )
+            if existing and (now - existing.last_seen_at) < 45.0:
+                existing.last_seen_at = now
+                if det.confidence > existing.confidence:
+                    existing.confidence = det.confidence
+                db.commit()
+                continue
+
             ev_name = f"evidence_live_{det.id}.jpg"
             ev_path = os.path.join(EVIDENCE_DIR, ev_name)
             ann_frame = detector.annotate_frame(
@@ -754,20 +777,26 @@ def reset_database(db: Session = Depends(get_db)):
     """
     Cleans all database records and evidence snapshots for a fresh demonstration.
     """
+    global last_reset_time
+    last_reset_time = time.time()
+
     db.query(DetectionRecordModel).delete()
     db.query(EscalationLogModel).delete()
     db.query(IssueModel).delete()
     db.query(InspectionRunModel).delete()
     db.commit()
 
-    # Clear generated evidence files
-    for f in os.listdir(EVIDENCE_DIR):
-        p = os.path.join(EVIDENCE_DIR, f)
-        try:
-            if os.path.isfile(p):
-                os.remove(p)
-        except Exception:
-            pass
+    # Clear generated evidence files, preserving .gitkeep
+    if os.path.exists(EVIDENCE_DIR):
+        for f in os.listdir(EVIDENCE_DIR):
+            if f == ".gitkeep":
+                continue
+            p = os.path.join(EVIDENCE_DIR, f)
+            try:
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception:
+                pass
 
     return {
         "success": True,

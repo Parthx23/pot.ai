@@ -127,7 +127,7 @@ export default function VideoInspector({
         const data = JSON.parse(event.data);
         if (data.type === 'CAMERA_DETECTIONS') {
           setCameraDetections(data.detections || []);
-          if (data.newIssue || data.matchedIssue) {
+          if (data.newIssue || data.escalation) {
             if (onRefreshData) onRefreshData();
           }
         }
