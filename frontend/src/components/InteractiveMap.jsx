@@ -1,26 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 
-const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY || 'cb1_4bfk_1_5520b30f927dc6d4b55572b8';
+const CARTO_API_KEY = (import.meta.env.VITE_CARTO_API_KEY || 'cb1_4bfk_1_5520b30f927dc6d4b55572b8').trim();
 
 const CARTO_STYLES = {
   voyager: {
     id: 'voyager',
     name: 'CARTO Voyager',
     icon: 'explore',
-    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
   },
   positron: {
     id: 'positron',
     name: 'CARTO Positron',
     icon: 'light_mode',
-    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
   },
   dark: {
     id: 'dark',
     name: 'CARTO Dark Matter',
     icon: 'dark_mode',
-    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+    url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  },
+  osm: {
+    id: 'osm',
+    name: 'OSM Standard',
+    icon: 'public',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }
 };
 
@@ -43,10 +53,11 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
         zoomControl: true,
       });
 
-      // CARTO Basemap tile layer authenticated with API key
-      const initialLayer = L.tileLayer(CARTO_STYLES[activeStyle].url, {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
+      // CARTO Basemap tile layer authenticated with API key (?key=)
+      const initialStyle = CARTO_STYLES[activeStyle] || CARTO_STYLES.voyager;
+      const initialLayer = L.tileLayer(initialStyle.url, {
+        attribution: initialStyle.attribution,
+        subdomains: initialStyle.id === 'osm' ? 'abc' : 'abcd',
         maxZoom: 20
       }).addTo(map);
 
@@ -64,7 +75,7 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
     };
   }, []);
 
-  // Handle Carto Basemap style changes
+  // Handle Basemap style changes
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
@@ -75,8 +86,8 @@ export default function InteractiveMap({ issues = [], selectedIssue, onSelectIss
 
     const selectedStyle = CARTO_STYLES[activeStyle] || CARTO_STYLES.voyager;
     const newLayer = L.tileLayer(selectedStyle.url, {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
+      attribution: selectedStyle.attribution,
+      subdomains: selectedStyle.id === 'osm' ? 'abc' : 'abcd',
       maxZoom: 20
     }).addTo(map);
 
