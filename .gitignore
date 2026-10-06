@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Python cache & environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Temporary and build artifacts
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Runtime uploads (keep directories via .gitkeep)
+uploads/evidence/*
+!uploads/evidence/.gitkeep
+uploads/videos/*
+!uploads/videos/.gitkeep
+sample_data/.cache/
+
+# Local database
+roadwatch.db
+*.sqlite3
