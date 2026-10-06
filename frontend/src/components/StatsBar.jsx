@@ -1,73 +1,73 @@
 import React from 'react';
 
 export default function StatsBar({ stats = {}, issues = [], selectedFilter, onSelectFilter }) {
-  // Dynamically compute counts by defect category
-  const totalIssues = issues.length > 0 ? issues.length : (stats.totalDetected || 148);
+  // Dynamically compute counts by defect category from actual real data
+  const totalIssues = issues.length > 0 ? issues.length : (stats.totalDetected || 0);
 
   const potholesList = issues.filter(i => 
     i.defectType?.includes('POTHOLE') || i.rawClass?.toLowerCase().includes('pothole') || i.title?.toLowerCase().includes('pothole')
   );
-  const potholesCount = potholesList.length > 0 ? potholesList.length : (stats.potholesCount || 84);
-  const criticalPotholes = potholesList.filter(i => i.priority === 'CRITICAL' || i.severity === 'CRITICAL').length || 18;
+  const potholesCount = potholesList.length;
+  const criticalPotholes = potholesList.filter(i => i.priority === 'CRITICAL' || i.severity === 'CRITICAL').length;
 
   const damagedRoadsList = issues.filter(i => 
-    i.defectType?.includes('ROAD_') || i.defectType?.includes('SURFACE') || i.defectType?.includes('PAVEMENT') || i.title?.toLowerCase().includes('crack') || i.title?.toLowerCase().includes('subsidence')
+    i.defectType?.includes('ROAD_') || i.defectType?.includes('SURFACE') || i.defectType?.includes('PAVEMENT') || i.title?.toLowerCase().includes('crack') || i.title?.toLowerCase().includes('subsidence') || i.title?.toLowerCase().includes('damaged')
   );
-  const damagedRoadsCount = damagedRoadsList.length > 0 ? damagedRoadsList.length : (stats.damagedRoadsCount || 42);
+  const damagedRoadsCount = damagedRoadsList.length;
 
   const streetlightsList = issues.filter(i => 
     i.defectType?.includes('LIGHT') || i.defectType?.includes('TRAFFIC') || i.title?.toLowerCase().includes('light')
   );
-  const streetlightsCount = streetlightsList.length > 0 ? streetlightsList.length : (stats.streetlightsCount || 22);
+  const streetlightsCount = streetlightsList.length;
 
   const persistentList = issues.filter(i => (i.occurrences && i.occurrences >= 2) || i.status === 'ESCALATED');
-  const persistentCount = persistentList.length > 0 ? persistentList.length : (stats.persistent || 19);
+  const persistentCount = persistentList.length > 0 ? persistentList.length : (stats.persistent || 0);
 
   const metrics = [
     {
       id: 'ALL',
-      label: 'Total Detected Issues',
+      label: 'TOTAL DETECTED ISSUES',
       value: totalIssues,
       icon: 'assessment',
-      tag: '+12 today',
-      tagType: 'accent',
-      detail: 'Corridor 101, Mission, 4th Ave'
+      tag: totalIssues > 0 ? `+${totalIssues} active` : '0 active',
+      tagType: totalIssues > 0 ? 'accent' : 'neutral',
+      detail: totalIssues > 0 ? 'Corridor 101, Mission, 4th Ave' : 'Corridor Scan Ready'
     },
     {
       id: 'POTHOLE',
-      label: 'Potholes',
+      label: 'POTHOLES',
       value: potholesCount,
       icon: 'warning',
       tag: `${criticalPotholes} Critical`,
-      tagType: 'critical',
-      detail: 'Avg. Depth: 6.2cm · Impact High'
+      tagType: criticalPotholes > 0 ? 'critical' : 'neutral',
+      detail: potholesCount > 0 ? 'Avg. Depth: 6.2cm · Impact High' : 'Zero potholes detected'
     },
     {
       id: 'ROAD',
-      label: 'Damaged Roads',
+      label: 'DAMAGED ROADS',
       value: damagedRoadsCount,
       icon: 'alt_route',
-      tag: 'Moderate',
-      tagType: 'neutral',
-      detail: 'Linear fissures & subsidence'
+      tag: damagedRoadsCount > 0 ? 'Moderate' : 'Nominal',
+      tagType: damagedRoadsCount > 0 ? 'neutral' : 'neutral',
+      detail: damagedRoadsCount > 0 ? 'Linear fissures & subsidence' : 'Zero surface damage'
     },
     {
       id: 'LIGHT',
-      label: 'Broken Streetlights',
+      label: 'BROKEN STREETLIGHTS',
       value: streetlightsCount,
       icon: 'lightbulb',
-      tag: 'High Severity',
-      tagType: 'warning',
-      detail: 'Tilt alerts & dark zones'
+      tag: streetlightsCount > 0 ? 'High Severity' : 'Operational',
+      tagType: streetlightsCount > 0 ? 'warning' : 'neutral',
+      detail: streetlightsCount > 0 ? 'Tilt alerts & dark zones' : 'All lighting active'
     },
     {
       id: 'PERSISTENT',
-      label: 'Active / Persistent',
+      label: 'ACTIVE / PERSISTENT',
       value: persistentCount,
       icon: 'schedule',
-      tag: 'Pending Dispatch',
-      tagType: 'warning-subtle',
-      detail: '4 work orders queued'
+      tag: persistentCount > 0 ? 'Pending Dispatch' : 'Clear',
+      tagType: persistentCount > 0 ? 'warning-subtle' : 'neutral',
+      detail: persistentCount > 0 ? `${persistentCount} work orders queued` : 'Zero persistent defects'
     }
   ];
 
@@ -93,7 +93,8 @@ export default function StatsBar({ stats = {}, issues = [], selectedFilter, onSe
               flexDirection: 'column',
               justifyContent: 'space-between',
               border: isActive ? '1px solid var(--accent-amber)' : '1px solid var(--border-subtle)',
-              backgroundColor: isActive ? '#fffcf8' : '#ffffff'
+              backgroundColor: isActive ? '#fffcf8' : '#ffffff',
+              transition: 'all 0.15s ease'
             }}
           >
             {/* Card Top Label & Icon */}
@@ -108,85 +109,45 @@ export default function StatsBar({ stats = {}, issues = [], selectedFilter, onSe
               <span style={{
                 fontSize: '11px',
                 fontFamily: 'var(--font-mono)',
-                textTransform: 'uppercase',
-                color: 'var(--text-secondary)',
                 fontWeight: 600,
+                color: 'var(--text-secondary)',
                 letterSpacing: '0.04em'
               }}>
                 {metric.label}
               </span>
-              <span className="material-symbols-outlined" style={{ fontSize: '15px', color: 'var(--text-muted)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
                 {metric.icon}
               </span>
             </div>
 
             {/* Metric Value & Tag */}
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: '2px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              margin: '4px 0'
+            }}>
               <span style={{
-                fontSize: '26px',
-                fontWeight: 700,
+                fontSize: '28px',
+                fontWeight: 800,
+                fontFamily: 'var(--font-mono)',
                 color: 'var(--text-primary)',
-                fontFamily: 'var(--font-heading)',
                 lineHeight: 1
               }}>
                 {metric.value}
               </span>
 
-              {metric.tagType === 'critical' && (
-                <span className="civic-badge badge-critical" style={{ fontSize: '10.5px' }}>
-                  <span className="civic-badge-dot"></span>
-                  {metric.tag}
-                </span>
-              )}
-
-              {metric.tagType === 'accent' && (
-                <span style={{
-                  fontSize: '10.5px',
-                  fontWeight: 600,
-                  color: 'var(--accent-amber)',
-                  backgroundColor: 'var(--accent-amber-light)',
-                  border: '1px solid var(--accent-amber-border)',
-                  padding: '2px 6px',
-                  borderRadius: 'var(--radius-xs)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px'
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>trending_up</span>
-                  {metric.tag}
-                </span>
-              )}
-
-              {metric.tagType === 'warning' && (
-                <span className="civic-badge badge-warning" style={{ fontSize: '10.5px' }}>
-                  <span className="civic-badge-dot"></span>
-                  {metric.tag}
-                </span>
-              )}
-
-              {metric.tagType === 'warning-subtle' && (
-                <span style={{
-                  fontSize: '10.5px',
-                  fontWeight: 500,
-                  color: 'var(--accent-amber-text)',
-                  backgroundColor: '#fef3c7',
-                  border: '1px solid #fde68a',
-                  padding: '2px 6px',
-                  borderRadius: 'var(--radius-xs)'
-                }}>
-                  {metric.tag}
-                </span>
-              )}
-
-              {metric.tagType === 'neutral' && (
-                <span className="civic-badge badge-neutral" style={{ fontSize: '10.5px' }}>
-                  {metric.tag}
-                </span>
-              )}
+              <span className={`civic-badge badge-${metric.tagType}`} style={{ fontSize: '10.5px' }}>
+                {metric.tag}
+              </span>
             </div>
 
-            {/* Context Detail */}
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+            {/* Sub-label / Detail */}
+            <div style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              marginTop: '4px'
+            }}>
               {metric.detail}
             </div>
           </div>
